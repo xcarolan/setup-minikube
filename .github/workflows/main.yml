@@ -1,0 +1,142 @@
+Skip to content
+Navigation Menu
+medyagh
+/
+setup-minikube
+
+Type / to search
+Code
+Issues
+5
+Pull requests
+1
+Actions
+Projects
+Security
+Insights
+Back to pull request #496
+add podman test #1136
+Jobs
+Run details
+Workflow file for this run
+.github/workflows/test.yml at d4cfaee
+name: "build-test"
+on: # rebuild any PRs and main branch changes
+  pull_request:
+    types:
+      [ opened, synchronize, reopened ]
+  push:
+    branches:
+      - master
+      - 'releases/*'
+jobs:
+  build: # make sure build/ci work properly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b
+        with:
+          node-version: 20
+      - run: |
+          npm ci
+          npm run all
+          __tests__/verify-no-unstaged-changes.sh
+  test: # make sure the action works on a clean machine without building
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: ./
+        with:
+          addons: ingress
+      # Test that nginx ingress has been enabled
+      - run: |
+          minikube addons list | grep 'ingress ' | grep enabled
+  test-extraOptions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: ./
+        with:
+          extra-config: 'kubelet.max-pods=10'
+      # Test that minikube max-pods extraConfig has been set
+      - run: |
+          cat ~/.minikube/profiles/minikube/config.json | jq '.KubernetesConfig.ExtraOptions[0].Key' | grep max-pods
+  test-insecure-registry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: ./
+        with:
+          insecure-registry: '192.168.0.0/16'
+      # Test that minikube max-pods extraConfig has been set
+      - run: |
+          minikube ssh cat /lib/systemd/system/docker.service | grep 192.168.0.0/16
+  test-featureGatesOptions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: ./
+        with:
+          feature-gates: 'ValidatingAdmissionPolicy=true'
+          extra-config: 'apiserver.runtime-config=admissionregistration.k8s.io/v1alpha1'
+          kubernetes-version: 1.26.0
+          container-runtime: containerd
+      # Should be fine
+      - run: |
+          cat ~/.minikube/profiles/minikube/config.json | grep ValidatingAdmissionPolicy
+  test-none-driver:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: ./
+        with:
+          driver: none
+      - run: |
+          kubectl --namespace=kube-system rollout status deployment/coredns --timeout=60s --watch
+      # Test basic networking and DNS resolution
+      - run: |
+          kubectl run \
+            --attach \
+            --image=docker.io/busybox \
+            --restart=Never \
+            --rm \
+            nslookup \
+            -- \
+            nslookup kubernetes.default.svc.cluster.local
+  test-podman-driver:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Podman
+        shell: bash
+        run: |
+          lsb_release -a
+          sudo apt update
+          sudo apt install -y podman
+          echo "--------------------------"
+          podman version || true
+          echo "--------------------------"
+          podman info || true
+          echo "--------------------------"
+          podman system df || true
+          echo "--------------------------"
+          podman system info --format='{{json .}}'|| true
+          echo "--------------------------"
+          podman ps || true
+          echo "--------------------------"
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+      - uses: ./
+        with:
+          driver: podman
+      - run: |
+          kubectl --namespace=kube-system rollout status deployment/coredns --timeout=60s --watch
+      # Test basic networking and DNS resolution
+      - run: |
+          kubectl run \
+            --attach \
+            --image=docker.io/busybox \
+            --restart=Never \
+            --rm \
+            nslookup \
+            -- \
+            nslookup kubernetes.default.svc.cluster.local
+add poman test · medyagh/setup-minikube@d4cfaee
