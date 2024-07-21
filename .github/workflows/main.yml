@@ -117,4 +117,4 @@ jobs:
             nslookup \
             -- \
             nslookup kubernetes.default.svc.cluster.local
-add poman test · medyagh/setup-minikube@d4cfaee
+
